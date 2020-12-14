@@ -1,0 +1,50 @@
+########building index/alignment/counting reads demo###########
+#### using Raw mouse mammary RNA-Seq data(fastq) from kaggle. 
+library(Rsubread)
+#checking the quality scores of 20 reads in each fastq file and plot them.
+fastq<- list.files(path = "./archive",pattern = '.fastq$',full.names = TRUE)
+for ( i in 1:12) {
+  qs<-qualityScores(filename = fastq[i], nreads = 20)
+  boxplot(qs)}
+#building index of chr10 reference mouse genome.
+buildindex(basename = 'chr10',reference ='chr10.fa') 
+# alignment with chr10 reference mouse genome
+align(index="chr10",readfile1=fastq)
+bam<-list.files(path = './archive', pattern = '.BAM$',full.names = TRUE)
+# checking the bam files quality score of 20 reads in each file and plot them.
+for ( i in 1:12) {
+  bqs<-qualityScores(filename = bam[i], nreads = 20, input_format = 'BAM')
+  boxplot(bqs)}
+#counting the mapped reads of fist bam file using mm10 reference genome .
+fcounts <- featureCounts(bam[1], annot.inbuilt="mm10")
+fcounts$annotation[1:6,c("GeneID","Length")]
+fcounts$counts[1:6,]
+fcounts$stat[1:6, ]
+#counting mapped reads of all bam files using mm10 referencing genome. 
+fcounts <- featureCounts(bam, annot.inbuilt="mm10")
+colnames(fcounts$counts) <- fastq
+head(fcounts$counts)
+#########demo of differential expression analyses of normal and mutated genes########
+library(edgeR)
+library(limma)
+#creating a 'fake' DGEList with 4 samples and 20 genes
+readcounts<- matrix(data = floor(runif(100, min= 0, max = 100)), nrow = 20, ncol = 4)
+GeneID<-(floor(runif(20, min=3827, max=1000000)))
+Length<-(floor(runif(20, min=1856, max=10000)))
+Genes<- data.frame(GeneID,Length)
+L <- DGEList(counts=readcounts, genes=Genes,group = c('normal','mutated','mutated','normal'))
+## get rid of low expressed genes.
+keep <- filterByExpr(L)
+L <- L[keep, , keep.lib.sizes=FALSE]
+## the design matrix
+status <- factor(c('normal','mutated','mutated','normal'))
+design <- model.matrix(~0+status)
+###Perform voom normalization
+y <- voom(x,design,plot=TRUE)
+y
+###clustering
+plotMDS(y,xlim=c(-3.5,3.5))
+###fiting general linear  model(without guaranteeing valid dispersion values in DEGList due to uncertain count reads)
+G<-glmFit(L,design)
+G
+
